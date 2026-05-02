@@ -1,12 +1,26 @@
 # slidev-teaching-workspace
 
-A Slidev workspace dashboard and CLI for managing many decks from one course or teaching repository. It discovers configured decks, starts individual Slidev dev servers on demand, runs build/export jobs, previews generated artifacts, and can build a static catalog for browsing published decks.
+A Slidev workspace dashboard and CLI for managing many decks from one repository. It discovers configured decks, starts individual Slidev dev servers on demand, runs build/export jobs, previews generated artifacts, and can build a static catalog for browsing published decks.
+
+This package was inspired by the original [`slidev-workspace`](https://www.npmjs.com/package/slidev-workspace) package ([GitHub](https://github.com/leochiu-a/slidev-workspace)).
 
 The npm package ships a compiled CLI for running a workspace dashboard around many Slidev decks. The command exposed by the package is:
 
 ```bash
 slidev-teaching-workspace
 ```
+
+## Features
+
+- Organize decks by category and subcategory from a repository-level YAML file.
+- Browse deck metadata, covers, build status, export status, and runtime status from one dashboard.
+- Start and stop individual Slidev dev servers from the interface.
+- Build individual decks, selected groups of decks, or the full workspace catalog.
+- Export decks from the interface and preview generated files when available.
+- Serve built deck previews and exported PDFs from the workspace dashboard.
+- Generate a static workspace catalog for publishing or archiving.
+- Choose between built-in dashboard themes.
+- Use Slidev-compatible remote mode for presenting decks on the local network.
 
 ## Requirements
 
@@ -18,14 +32,14 @@ Decks can use either local dependencies or a globally available `slidev` binary.
 
 ## Installation
 
-For the global workflow used by a teaching repository:
+For a global install:
 
 ```bash
 npm install -g slidev-teaching-workspace
 slidev-teaching-workspace
 ```
 
-Run the command from the repository root that contains `slidev-teaching-workspace.yaml`. This keeps the workspace manager available as a global CLI instead of requiring a `node_modules` folder inside every teaching repository.
+Run the command from the repository root that contains `slidev-teaching-workspace.yaml`. This keeps the workspace manager available as a global CLI instead of requiring a `node_modules` folder in the workspace repository.
 
 For a project-local install:
 
@@ -45,13 +59,16 @@ Create `slidev-teaching-workspace.yaml` in the repository root:
 
 ```yaml
 categories:
-  - id: data-analytics
-    label: "Data Analytics"
-    cover: "./Data_Analytics/Current/Canvas-Image.jpg"
+  - id: course-a
+    label: "Course A"
+    cover: "./courses/course-a/cover.jpg"
     subcategories:
       - id: lectures
         label: "Lectures"
-        slidesDir: "./Data_Analytics/Current/Lectures/Slidev"
+        slidesDir: "./courses/course-a/lectures"
+      - id: cases
+        label: "Cases"
+        slidesDir: "./courses/course-a/cases"
 
 outputDir: "./dist/slidev-workspace"
 baseUrl: "/"
@@ -62,12 +79,12 @@ interface:
   theme: "classic"
 
 hero:
-  title: "Teaching Slides"
-  description: "Course decks and exports"
+  title: "Slidev Workspace"
+  description: "Decks, previews, exports, and static builds"
 
 sidebar:
   title: "Slidev Workspace"
-  githubUrl: "https://github.com/example/repo"
+  githubUrl: "https://github.com/owner/repository"
 ```
 
 Each deck directory should contain `slides.md` and `package.json`.
@@ -111,25 +128,6 @@ workspace:
 ```
 
 When no order is provided, decks fall back to natural sorting by course, section, and folder label.
-
-## Publishing
-
-This package ships compiled JavaScript, declarations, and the built dashboard UI from `dist`. Run these checks before publishing:
-
-```bash
-npm test
-npm run check:pack
-```
-
-`npm pack` and `npm publish` run `prepack`, which rebuilds `dist` before packaging.
-
-Publish from this directory:
-
-```bash
-npm publish
-```
-
-For CI releases on npm, prefer trusted publishing or `npm publish --provenance` when your npm account and workflow support it.
 
 ## License
 
