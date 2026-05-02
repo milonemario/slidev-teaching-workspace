@@ -1,0 +1,91 @@
+{
+  "name": "slidev-teaching-workspace",
+  "version": "0.1.0",
+  "description": "A workspace dashboard and CLI for managing collections of Slidev decks.",
+  "type": "module",
+  "author": "Mario Milone",
+  "license": "MIT",
+  "homepage": "https://github.com/milonemario/slidev-teaching-workspace#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/milonemario/slidev-teaching-workspace.git"
+  },
+  "bugs": {
+    "url": "https://github.com/milonemario/slidev-teaching-workspace/issues"
+  },
+  "keywords": [
+    "slidev",
+    "slidev-workspace",
+    "workspace",
+    "cli",
+    "dashboard",
+    "teaching",
+    "presentations"
+  ],
+  "bin": {
+    "slidev-teaching-workspace": "./dist/cli.js"
+  },
+  "main": "./dist/server.js",
+  "types": "./dist/server.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.js"
+    },
+    "./commands": {
+      "types": "./dist/commands.d.ts",
+      "import": "./dist/commands.js"
+    },
+    "./config": {
+      "types": "./dist/config.d.ts",
+      "import": "./dist/config.js"
+    },
+    "./decks": {
+      "types": "./dist/decks.d.ts",
+      "import": "./dist/decks.js"
+    },
+    "./static-build": {
+      "types": "./dist/staticBuild.d.ts",
+      "import": "./dist/staticBuild.js"
+    }
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20.12.0",
+    "slidev": ">=52.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "yaml": "2.8.3"
+  },
+  "peerDependencies": {
+    "@slidev/cli": ">=52.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@slidev/cli": {
+      "optional": true
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && vite build",
+    "build:server": "tsc -p tsconfig.json",
+    "check:pack": "npm --cache /tmp/teaching-npm-cache pack --dry-run",
+    "install:global": "npm run build && package_tarball=$(npm --cache /tmp/teaching-npm-cache pack --pack-destination /tmp --ignore-scripts --silent) && npm --cache /tmp/teaching-npm-cache install -g --omit=dev --ignore-scripts \"/tmp/$package_tarball\" && rm -f \"/tmp/$package_tarball\"",
+    "pack:dry-run": "npm run check:pack",
+    "prepack": "npm run build",
+    "prepublishOnly": "npm test && npm run check:pack",
+    "reinstall:global": "npm run install:global",
+    "test": "npm run build && node --test test/*.test.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.17",
+    "typescript": "5.9.3",
+    "vite": "7.3.2"
+  }
+}
