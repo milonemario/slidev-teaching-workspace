@@ -65,6 +65,30 @@ button.secondary {
   background: var(--control-muted-bg);
 }
 
+button.primary.live-start {
+  background: #006fc9;
+  border-color: #006fc9;
+  color: #ffffff;
+}
+
+button.primary.live-start:hover:not(:disabled) {
+  background: #0057a3;
+  border-color: #0057a3;
+  color: #ffffff;
+}
+
+button.primary.live-stop {
+  background: #c62828;
+  border-color: #c62828;
+  color: #ffffff;
+}
+
+button.primary.live-stop:hover:not(:disabled) {
+  background: #a61919;
+  border-color: #a61919;
+  color: #ffffff;
+}
+
 input,
 select {
   min-height: 40px;

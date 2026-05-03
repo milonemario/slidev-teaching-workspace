@@ -518,7 +518,7 @@ function renderLiveActionGroup(deck: Deck): string {
 
   return `
     <div class="action-group live-action-group" aria-label="Live deck">
-      <button class="primary" data-action="${liveAction}" data-id="${escapeAttribute(deck.id)}" ${canToggleLive ? "" : "disabled"}>${liveLabel}</button>
+      <button class="primary live-toggle live-${liveAction}" data-action="${liveAction}" data-id="${escapeAttribute(deck.id)}" ${canToggleLive ? "" : "disabled"}>${liveLabel}</button>
       ${renderPreviewControl(canOpen, deck.runtime.url, "Open live deck")}
     </div>
   `;
