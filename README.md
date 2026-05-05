@@ -21,6 +21,7 @@ slidev-teaching-workspace
 - Generate a static workspace catalog for publishing or archiving.
 - Choose between built-in dashboard themes.
 - Use Slidev-compatible remote mode for presenting decks on the local network.
+- Password protect the workspace dashboard when serving it on a shared network.
 
 ## Requirements
 
@@ -93,7 +94,7 @@ Each deck directory should contain `slides.md` and `package.json`.
 
 ```bash
 slidev-teaching-workspace [--port 3000]
-slidev-teaching-workspace dev [--port 3000] [--remote] [--bind 0.0.0.0]
+slidev-teaching-workspace dev [--port 3000] [--remote] [--bind 0.0.0.0] [--password secret] [--username slidev]
 slidev-teaching-workspace build
 slidev-teaching-workspace export-og
 ```
@@ -106,12 +107,42 @@ Useful options:
 | `--open`, `-o` | Open the workspace in a browser |
 | `--remote` | Listen on a public host, matching Slidev remote mode; accepts an optional remote-control password |
 | `--bind`, `--host` | Address to bind in remote mode |
+| `--password` | Protect the workspace dashboard |
+| `--username` | Dashboard login username; defaults to `SLIDEV_WORKSPACE_USERNAME` or `slidev` |
 | `--force`, `-f` | Pass `--force` to deck dev servers |
 | `--log` | Pass a Slidev log level: `error`, `warn`, `info`, or `silent` |
 
 ### Remote Mode
 
 Remote mode intentionally follows Slidev's behavior. The workspace server binds publicly, and decks started from the dashboard are launched with Slidev's `--remote` and `--bind` options.
+
+When you provide `--password`, the workspace dashboard uses HTTP Basic Auth before serving any dashboard page, API response, deck cover, built preview, or exported file. Sign in with the configured username, defaulting to `slidev`, and the password you configured.
+
+```bash
+slidev-teaching-workspace --remote --password my-secret
+```
+
+To use a custom dashboard username:
+
+```bash
+slidev-teaching-workspace --remote --username mario --password my-secret
+```
+
+That command protects only the workspace dashboard. Decks started from the dashboard use Slidev's plain remote mode, with no Slidev presenter password.
+
+To use Slidev's built-in presenter password for deck remote mode, pass the deck secret to `--remote`:
+
+```bash
+slidev-teaching-workspace --remote deck-secret
+```
+
+That command protects Slidev presenter/remote routes with `deck-secret`, but it does not protect the workspace dashboard unless you also pass `--password`. When a deck secret is configured, live deck links opened from the workspace include Slidev's `?password=...` query so presenter mode is available without typing the secret manually.
+
+To protect both independently, pass both values:
+
+```bash
+slidev-teaching-workspace --remote deck-secret --password dashboard-secret
+```
 
 Plain Slidev remote access works without a deck `vite.config.ts` when using localhost or IP-address hosts. If you serve decks through a custom DNS name, Vite requires that host to be listed in `server.allowedHosts`; configure that in the deck's Vite config just as you would when running Slidev directly.
 

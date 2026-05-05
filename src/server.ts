@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { spawn } from "node:child_process";
+import { timingSafeEqual } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { networkInterfaces } from "node:os";
 import { basename, extname, join, normalize, resolve, sep } from "node:path";
@@ -30,6 +31,8 @@ export interface StartServerOptions {
   open?: boolean;
   force?: boolean;
   log?: string;
+  password?: string;
+  username?: string;
 }
 
 interface DeckView {
@@ -76,6 +79,16 @@ interface EventClient {
 }
 
 const uiDir = fileURLToPath(new URL("./ui", import.meta.url));
+const MAX_JSON_BODY_BYTES = 1_000_000;
+
+class HttpError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
 
 export async function startServer(options: StartServerOptions): Promise<void> {
   const cwd = options.cwd ?? process.cwd();
@@ -86,6 +99,9 @@ export async function startServer(options: StartServerOptions): Promise<void> {
   state.decks = discoverDecks(state.config);
   const remote = options.remote;
   const remoteEnabled = remote !== undefined;
+  const remoteSecret = remote?.trim() || undefined;
+  const password = workspacePassword(options.password);
+  const username = workspaceUsername(options.username);
   const bind = options.bind || process.env.SLIDEV_WORKSPACE_BIND || "0.0.0.0";
   const host = remoteEnabled ? bind : process.env.SLIDEV_WORKSPACE_HOST || "127.0.0.1";
   const port = await findFreePortForHost(options.port, host);
@@ -95,14 +111,18 @@ export async function startServer(options: StartServerOptions): Promise<void> {
     force: options.force,
     log: options.log,
   });
-  const events = new EventStream((req) => workspaceView(state.config, state.decks, manager, req));
+  const events = new EventStream((req) => workspaceView(state.config, state.decks, manager, req, remoteSecret));
   manager.onChange(() => events.broadcast("decks"));
 
   const server = createServer(async (req, res) => {
     try {
-      await routeRequest(req, res, state, manager, events);
+      if (password && !authorizeWorkspaceRequest(req, res, username, password)) {
+        return;
+      }
+      await routeRequest(req, res, state, manager, events, remoteSecret);
     } catch (error) {
-      sendJson(res, 500, {
+      const status = error instanceof HttpError ? error.status : 500;
+      sendJson(res, status, {
         error: error instanceof Error ? error.message : String(error),
       });
     }
@@ -139,11 +159,86 @@ export async function startServer(options: StartServerOptions): Promise<void> {
     for (const remoteUrl of networkUrls(port)) {
       console.log(`  Network: ${remoteUrl}`);
     }
+    if (!password) {
+      console.log("  Warning: remote workspace access is not password protected.");
+    }
+  }
+  if (password) {
+    console.log(`  Workspace password protection enabled. Use username "${username}".`);
   }
 
   if (options.open ?? process.env.SLIDEV_WORKSPACE_OPEN === "true") {
     openBrowser(url);
   }
+}
+
+function workspacePassword(optionPassword: string | undefined): string | undefined {
+  const envPassword = process.env.SLIDEV_WORKSPACE_PASSWORD?.trim();
+  const explicitPassword = optionPassword?.trim();
+
+  return explicitPassword || envPassword || undefined;
+}
+
+function workspaceUsername(optionUsername: string | undefined): string {
+  const envUsername = process.env.SLIDEV_WORKSPACE_USERNAME?.trim();
+  const explicitUsername = optionUsername?.trim();
+
+  return explicitUsername || envUsername || "slidev";
+}
+
+function authorizeWorkspaceRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  username: string,
+  password: string,
+): boolean {
+  if (isValidBasicAuthHeaderForUsername(req.headers.authorization, username, password)) {
+    return true;
+  }
+
+  res.writeHead(401, {
+    "Content-Type": "text/plain; charset=utf-8",
+    "WWW-Authenticate": 'Basic realm="Teaching Slidev Workspace", charset="UTF-8"',
+  });
+  res.end("Authentication required.");
+  return false;
+}
+
+export function isValidBasicAuthHeader(authorization: string | undefined, password: string): boolean {
+  return isValidBasicAuthHeaderForUsername(authorization, "slidev", password);
+}
+
+export function isValidBasicAuthHeaderForUsername(
+  authorization: string | undefined,
+  username: string,
+  password: string,
+): boolean {
+  const [scheme, encoded] = authorization?.trim().split(/\s+/, 2) ?? [];
+  if (scheme?.toLowerCase() !== "basic" || !encoded) {
+    return false;
+  }
+
+  let decoded: string;
+  try {
+    decoded = Buffer.from(encoded, "base64").toString("utf8");
+  } catch {
+    return false;
+  }
+
+  const separatorIndex = decoded.indexOf(":");
+  if (separatorIndex === -1) {
+    return false;
+  }
+
+  const candidateUsername = decoded.slice(0, separatorIndex);
+  const candidatePassword = decoded.slice(separatorIndex + 1);
+  return candidateUsername === username && constantTimeEqual(candidatePassword, password);
+}
+
+function constantTimeEqual(value: string, expected: string): boolean {
+  const valueBuffer = Buffer.from(value);
+  const expectedBuffer = Buffer.from(expected);
+  return valueBuffer.length === expectedBuffer.length && timingSafeEqual(valueBuffer, expectedBuffer);
 }
 
 async function routeRequest(
@@ -152,12 +247,13 @@ async function routeRequest(
   state: ServerState,
   manager: ProcessManager,
   events: EventStream,
+  remoteSecret: string | undefined,
 ): Promise<void> {
   const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
   const deckById = new Map(state.decks.map((deck) => [deck.id, deck]));
 
   if (req.method === "GET" && url.pathname === "/api/decks") {
-    sendJson(res, 200, workspaceView(state.config, state.decks, manager, req));
+    sendJson(res, 200, workspaceView(state.config, state.decks, manager, req, remoteSecret));
     return;
   }
 
@@ -262,7 +358,7 @@ async function routeRequest(
     }
 
     sendJson(res, 200, {
-      deck: deckView(state.config, deck, manager.snapshot(deck.id), req),
+      deck: deckView(state.config, deck, manager.snapshot(deck.id), req, remoteSecret),
     });
     return;
   }
@@ -308,20 +404,27 @@ function workspaceView(
   decks: Deck[],
   manager: ProcessManager,
   req: IncomingMessage,
+  remoteSecret: string | undefined,
 ): {
   config: Record<string, unknown>;
   decks: DeckView[];
 } {
   return {
     config: publicConfig(config),
-    decks: decks.map((deck) => deckView(config, deck, manager.snapshot(deck.id), req)),
+    decks: decks.map((deck) => deckView(config, deck, manager.snapshot(deck.id), req, remoteSecret)),
   };
 }
 
-function deckView(config: WorkspaceConfig, deck: Deck, snapshot: DeckSnapshot, req: IncomingMessage): DeckView {
+function deckView(
+  config: WorkspaceConfig,
+  deck: Deck,
+  snapshot: DeckSnapshot,
+  req: IncomingMessage,
+  remoteSecret: string | undefined,
+): DeckView {
   const runtime: DeckView["runtime"] = { ...snapshot.runtime };
   if (runtime.port && (runtime.status === "running" || runtime.status === "starting")) {
-    runtime.url = `http://${requestHostname(req)}:${runtime.port}/`;
+    runtime.url = deckRuntimeUrl(req, runtime.port, remoteSecret);
   }
   const sourceTime = newestDeckSourceTime(deck);
   const buildPath = join(deck.dir, "dist", "index.html");
@@ -421,6 +524,16 @@ function deckExportPreviewUrl(deck: Deck): string | undefined {
   }
 
   return `/exported/${encodeURIComponent(deck.id)}/`;
+}
+
+function deckRuntimeUrl(req: IncomingMessage, port: number, remoteSecret: string | undefined): string {
+  const baseUrl = `http://${requestHostname(req)}:${port}/`;
+  if (!remoteSecret) {
+    return baseUrl;
+  }
+
+  const encodedPassword = encodeURIComponent(remoteSecret);
+  return `${baseUrl}?password=${encodedPassword}#/1?password=${encodedPassword}`;
 }
 
 function artifactStatus(outputPath: string | undefined, sourceTime: number): ArtifactStatus {
@@ -591,15 +704,25 @@ function requestHostname(req: IncomingMessage): string {
 
 async function readJsonBody(req: IncomingMessage): Promise<Record<string, unknown>> {
   const chunks: Buffer[] = [];
+  let size = 0;
   for await (const chunk of req) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    size += buffer.length;
+    if (size > MAX_JSON_BODY_BYTES) {
+      throw new HttpError(413, "JSON body is too large.");
+    }
+    chunks.push(buffer);
   }
 
   if (!chunks.length) {
     return {};
   }
 
-  return JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>;
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>;
+  } catch {
+    throw new HttpError(400, "Invalid JSON body.");
+  }
 }
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {

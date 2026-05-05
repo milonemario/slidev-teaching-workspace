@@ -12,6 +12,8 @@ interface ParsedArgs {
   open?: boolean;
   force: boolean;
   log?: string;
+  password?: string;
+  username?: string;
   help: boolean;
   version: boolean;
 }
@@ -42,6 +44,8 @@ async function main(): Promise<void> {
       open: args.open,
       force: args.force,
       log: args.log,
+      password: args.password,
+      username: args.username,
     });
     return;
   }
@@ -80,6 +84,8 @@ function parseArgs(argv: string[]): ParsedArgs {
   let open: boolean | undefined;
   let force = false;
   let log: string | undefined;
+  let password: string | undefined;
+  let username: string | undefined;
   let help = false;
   let version = false;
 
@@ -129,6 +135,16 @@ function parseArgs(argv: string[]): ParsedArgs {
       index += 1;
     } else if (arg.startsWith("--log=")) {
       log = arg.slice("--log=".length);
+    } else if (arg === "--password") {
+      password = String(argv[index + 1] ?? "");
+      index += 1;
+    } else if (arg.startsWith("--password=")) {
+      password = arg.slice("--password=".length);
+    } else if (arg === "--username") {
+      username = String(argv[index + 1] ?? "");
+      index += 1;
+    } else if (arg.startsWith("--username=")) {
+      username = arg.slice("--username=".length);
     } else {
       throw new Error(`Unknown option: ${arg}`);
     }
@@ -143,16 +159,22 @@ function parseArgs(argv: string[]): ParsedArgs {
   if (log && !["error", "warn", "info", "silent"].includes(log)) {
     throw new Error(`Invalid log level: ${log}`);
   }
+  if (password !== undefined && !password.trim()) {
+    throw new Error("Invalid password");
+  }
+  if (username !== undefined && !username.trim()) {
+    throw new Error("Invalid username");
+  }
 
-  return { command, port, remote, bind, open, force, log, help, version };
+  return { command, port, remote, bind, open, force, log, password, username, help, version };
 }
 
 function printHelp(): void {
   console.log(`Teaching Slidev Workspace
 
 Usage:
-  slidev-teaching-workspace [--port 3000] [--remote] [--bind 0.0.0.0]
-  slidev-teaching-workspace dev [--port 3000] [--remote] [--bind 0.0.0.0]
+  slidev-teaching-workspace [--port 3000] [--remote] [--bind 0.0.0.0] [--password secret] [--username slidev]
+  slidev-teaching-workspace dev [--port 3000] [--remote] [--bind 0.0.0.0] [--password secret] [--username slidev]
   slidev-teaching-workspace build
   slidev-teaching-workspace export-og
 
@@ -162,6 +184,8 @@ Options:
       --remote   listen on public host, matching Slidev remote mode; accepts an optional password
       --bind     address to bind in remote mode                 [default: 0.0.0.0]
       --host     alias for --bind
+      --password protect the workspace dashboard
+      --username dashboard login username                       [default: slidev]
   -f, --force    pass --force to deck dev servers
       --log      pass log level to deck dev servers             [error|warn|info|silent]
   -h, --help     show help
